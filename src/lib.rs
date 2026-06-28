@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::ops::Deref;
+use std::ptr::read_unaligned;
 
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct CompactSize {
@@ -23,7 +24,7 @@ impl CompactSize {
         // TODO: Encode according to Bitcoin's CompactSize format:
         // [0x00–0xFC] => 1 byte
         // [0xFDxxxx] => 0xFD + u16 (2 bytes)
-        // [0xFExxxxxxxx] => 0xFE + u32 (4 bytes)
+        // [0xFExxxxxxxx] =>     0xFE + u32 (4 bytes)
         // [0xFFxxxxxxxxxxxxxxxx] => 0xFF + u64 (8 bytes)
     }
 
@@ -54,6 +55,14 @@ impl<'de> Deserialize<'de> for Txid {
     {
         // TODO: Parse hex string into 32-byte array
         // Use `hex::decode`, validate length = 32
+        let ds = String::deserialize(deserializer)?;
+        let bytes = hex::decode(&ds).map_err(serde::de::Error::custom)?;
+        if bytes.len() != 32 {
+            return Err(serde::de::Error::custom("Txid must be 32 bytes"));
+        }
+        let mut array = [0u8; 32];
+        array.copy_from_slice(&bytes);  
+        Ok(Txid(array))
     }
 }
 
