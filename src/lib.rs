@@ -75,15 +75,23 @@ pub struct OutPoint {
 impl OutPoint {
     pub fn new(txid: [u8; 32], vout: u32) -> Self {
         // TODO: Create an OutPoint from raw txid bytes and output index
+        Self { txid, vout }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
         // TODO: Serialize as: txid (32 bytes) + vout (4 bytes, little-endian)
+        let mut output = Vec::new();
+        output.extend(&self.txid.0);
+        output.extend(&self.vout.to_le_bytes());
+        output
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Deserialize 36 bytes: txid[0..32], vout[32..36]
         // Return error if insufficient bytes
+        let txid = bytes[0..32].try_into().unwrap();
+        let vout = u32::from_le_bytes(bytes[32..36].try_into().unwrap());
+        Ok((Self { txid, vout }, 36))
     }
 }
 
@@ -95,6 +103,7 @@ pub struct Script {
 impl Script {
     pub fn new(bytes: Vec<u8>) -> Self {
         // TODO: Simple constructor
+        Self { bytes }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -108,7 +117,18 @@ impl Script {
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Parse CompactSize prefix, then read that many bytes
         // Return error if not enough bytes
-        
+        let (cs, consumed) = CompactSize::from_bytes(bytes)?;
+        let len = cs.value as usize;
+        if bytes.len() < consumed + len {
+            return Err(BitcoinError::InsufficientBytes);
+        }
+        let script_bytes =bytes[consumed..consumed + len].to_vec();
+        Ok((
+            Self {
+                bytes: script_bytes,
+            },
+            consumed + len,
+        ))
     }
 }
 
