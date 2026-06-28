@@ -16,6 +16,7 @@ pub enum BitcoinError {
 impl CompactSize {
     pub fn new(value: u64) -> Self {
         // TODO: Construct a CompactSize from a u64 value
+        Self { value }
     }
 
     pub fn to_bytes(&self) -> Vec<u8> {
@@ -42,6 +43,7 @@ impl Serialize for Txid {
         S: serde::Serializer,
     {
         // TODO: Serialize as a hex-encoded string (32 bytes => 64 hex characters)
+        serializer.serialize_str(&hex::encode(self.0))
     }
 }
 
