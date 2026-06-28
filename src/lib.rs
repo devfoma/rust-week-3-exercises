@@ -26,12 +26,60 @@ impl CompactSize {
         // [0xFDxxxx] => 0xFD + u16 (2 bytes)
         // [0xFExxxxxxxx] =>     0xFE + u32 (4 bytes)
         // [0xFFxxxxxxxxxxxxxxxx] => 0xFF + u64 (8 bytes)
+        let mut output = Vec::new();
+        match self.value {
+            0..=0xFC => {
+                output.push(self.value as u8);
+            }
+            0xFD..=0xFFFF => {
+                output.push(0xFD);
+                output.extend(&(self.value as u16).to_le_bytes());
+            }
+            0x10000..=0xFFFFFFFF => {
+                output.push(0xFE);
+                output.extend(&(self.value as u32).to_le_bytes());
+            }
+            _ => {
+                output.push(0xFF);
+                output.extend(&self.value.to_le_bytes());
+            }
+        }
+        output
     }
 
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Decode CompactSize, returning value and number of bytes consumed.
         // First check if bytes is empty.
         // Check that enough bytes are available based on prefix.
+        if bytes.is_empty() {
+            return Err(BitcoinError::InsufficientBytes);
+        }
+        let prefix = bytes[0];
+        let (value, consumed) = match prefix {
+            0..=0xFC => (prefix as u64, 1),
+            0xFD => {
+                if bytes.len() < 3 {
+                    return Err(BitcoinError::InsufficientBytes);
+                }
+                let val = u16::from_le_bytes(bytes[1..3].try_into().unwrap()) as u64;
+                (val, 3)
+            }
+            0xFE => {
+                if bytes.len() < 5 {
+                    return Err(BitcoinError::InsufficientBytes);
+                }
+                let val = u32::from_le_bytes(bytes[1..5].try_into().unwrap()) as u64;
+                (val, 5)
+            }
+            0xFF => {
+                if bytes.len() < 9 {
+                    return Err(BitcoinError::InsufficientBytes);
+                }
+                let val = u64::from_le_bytes(bytes[1..9].try_into().unwrap());
+                (val, 9)
+            }
+        };
+        Ok((Self { value }, consumed))
     }
 }
 
@@ -61,7 +109,7 @@ impl<'de> Deserialize<'de> for Txid {
             return Err(serde::de::Error::custom("Txid must be 32 bytes"));
         }
         let mut array = [0u8; 32];
-        array.copy_from_slice(&bytes);  
+        array.copy_from_slice(&bytes);
         Ok(Txid(array))
     }
 }
@@ -122,7 +170,7 @@ impl Script {
         if bytes.len() < consumed + len {
             return Err(BitcoinError::InsufficientBytes);
         }
-        let script_bytes =bytes[consumed..consumed + len].to_vec();
+        let script_bytes = bytes[consumed..consumed + len].to_vec();
         Ok((
             Self {
                 bytes: script_bytes,
@@ -173,7 +221,7 @@ impl TransactionInput {
         // - Sequence (4 bytes)
         let mut offset = 0;
         let (outpoint, consumed) = OutPoint::from_bytes(&bytes[offset..])?;
-        offset += consumed;     
+        offset += consumed;
         if (bytes.len() < offset + 4) {
             return Err(BitcoinError::InsufficientBytes);
         }
@@ -229,8 +277,8 @@ impl BitcoinTransaction {
     pub fn from_bytes(bytes: &[u8]) -> Result<(Self, usize), BitcoinError> {
         // TODO: Read version, CompactSize for input count
         // Parse inputs one by one
-        // Read final 4 bytes for 
-        let mut offset= 0;
+        // Read final 4 bytes for
+        let mut offset = 0;
         if bytes.len() < 4 {
             return Err(BitcoinError::InsufficientBytes);
         }
@@ -273,7 +321,11 @@ impl fmt::Display for BitcoinTransaction {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // TODO: Format a user-friendly string showing version, inputs, lock_time
         // Display scriptSig length and bytes, and previous output info
-        writeln!(f, "Transaction: version={}, lock_time={}", self.version, self.lock_time)?;
+        writeln!(
+            f,
+            "Transaction: version={}, lock_time={}",
+            self.version, self.lock_time
+        )?;
         for (i, input) in self.inputs.iter().enumerate() {
             writeln!(f, "  Input {}: {:?}", i, input)?;
         }
